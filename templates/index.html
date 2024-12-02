@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-controls">
+    <h2>Мониторинг температуры</h2>
+    <a href="{{ url_for('logout') }}" class="btn">Выйти</a>
+</div>
+<div class="form-group">
+    <h3>Текущая температура: <span id="current_temperature">--</span> °C</h3>
+</div>
+
+<div class="chart" id="temperatureChart"></div>
+
+<script>
+// Инициализация графика
+let minTemperature = -15;
+let middleTemperature = 0;
+let maxTemperature = 15;
+
+let trace = {
+    x: [],
+    y: [],
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Температура'
+};
+
+let minTrace = {
+    x: [],
+    y: [],
+    type: 'scatter',
+    mode: 'lines',
+    name: 'Мин. Температура',
+    line: {color: 'blue', dash: 'dot'}
+};
+
+let middleTrace = {
+    x: [],
+    y: [],
+    type: 'scatter',
+    mode: 'lines',
+    name: 'Ср. Температура',
+    line: {color: 'green', dash: 'dot'}
+};
+
+let maxTrace = {
+    x: [],
+    y: [],
+    type: 'scatter',
+    mode: 'lines',
+    name: 'Макс. температура',
+    line: {color: 'red', dash: 'dot'}
+};
+
+let layout = {
+    title: 'Температура со временем',
+    xaxis: { title: 'Дата и время', tickangle: -45, automargin: true },
+    yaxis: { title: 'Температура (%)' }
+};
+
+Plotly.newPlot('temperatureChart', [trace, minTrace, middleTrace, maxTrace], layout);
+
+function updateData() {
+    fetch('/api/current_temperature')
+        .then(response => response.json())
+        .then(data => {
+            if (data.current_temperature !== null) {
+                document.getElementById('current_temperature').textContent = data.current_temperature.toFixed(1);
+            
+                // Обновляем основной график
+                if (data.timestamp && (new Date(data.timestamp)).toLocaleString() == trace.x[trace.x.length - 1]) {
+                    return;
+                }
+
+                trace.x.push(new Date(data.timestamp).toLocaleString());
+                trace.y.push(data.current_temperature);
+
+                // Ограничиваем количество точек
+                if (trace.x.length > 30) {
+                    trace.x.shift();
+                    trace.y.shift();
+                }
+
+                // Обновляем линии
+                minTrace.x = [...trace.x];
+                minTrace.y = Array(trace.x.length).fill(minTemperature);
+
+                middleTrace.x = [...trace.x];
+                middleTrace.y = Array(trace.x.length).fill(middleTemperature);
+
+                maxTrace.x = [...trace.x];
+                maxTrace.y = Array(trace.x.length).fill(maxTemperature);
+
+                // Перерисовываем график
+                Plotly.react('temperatureChart', [trace, minTrace, middleTrace, maxTrace], layout);
+            } else {
+                document.getElementById('current_temperature').textContent = "--";
+            }
+        });
+}
+
+function loadHistoricalData() {
+    fetch('/api/temperature_history')
+        .then(response => response.json())
+        .then(data => {
+             // Загружаем исторические данные
+             data.forEach(item => {
+                trace.x.push(new Date(item.timestamp).toLocaleString());
+                trace.y.push(item.temperature);
+            });
+
+            minTrace.x = [...trace.x];
+            minTrace.y = Array(trace.x.length).fill(minTemperature);
+
+            middleTrace.x = [...trace.x];
+            middleTrace.y = Array(trace.x.length).fill(middleTemperature);
+
+            maxTrace.x = [...trace.x];
+            maxTrace.y = Array(trace.x.length).fill(maxTemperature);
+
+            // Перерисовываем график
+            Plotly.react('temperatureChart', [trace, minTrace, middleTrace, maxTrace], layout);
+        });
+}
+
+// Загрузка истории при первой загрузке страницы
+loadHistoricalData();
+// Обновление данных каждые 2 секунды
+setInterval(updateData, 1000);
+</script>
+{% endblock %}
